@@ -236,6 +236,7 @@
     <column name="APP_MSG_STATUS" type="VARCHAR" size="20"/>
     <column name="APP_MSG_ATTACH" type="LONGVARCHAR" required="false"/>
     <column name="APP_MSG_SEND_DATE" type="TIMESTAMP" required="true"/>
+    <column name="APP_MSG_SHOW_MESSAGE" type="TINYINT" required="true" default="1"/>
   </table>
   <table name="APP_OWNER">
     <vendor type="mysql">
@@ -795,6 +796,11 @@
     <column name="PRO_ASSIGNMENT" type="VARCHAR" size="20" required="true" default="FALSE"/>
     <column name="PRO_SHOW_MAP" type="TINYINT" required="true" default="1"/>
     <column name="PRO_SHOW_MESSAGE" type="TINYINT" required="true" default="1"/>
+    <column name="PRO_SUBPROCESS" type="TINYINT" required="true" default="0"/>
+    <column name="PRO_TRI_DELETED" type="VARCHAR" size="32" required="true" default=""/>
+    <column name="PRO_TRI_CANCELED" type="VARCHAR" size="32" required="true" default=""/>
+    <column name="PRO_TRI_PAUSED" type="VARCHAR" size="32" required="true" default=""/>
+    <column name="PRO_TRI_REASSIGNED" type="VARCHAR" size="32" required="true" default=""/>
     <column name="PRO_SHOW_DELEGATE" type="TINYINT" required="true" default="1"/>
     <column name="PRO_SHOW_DYNAFORM" type="TINYINT" required="true" default="0"/>
     <column name="PRO_CATEGORY" type="VARCHAR" size="48" required="true" default=""/>
@@ -1192,6 +1198,10 @@
     <column name="TAS_EVN_UID" type="VARCHAR" size="32" required="true" default=""/>
     <column name="TAS_BOUNDARY" type="VARCHAR" size="32" required="true" default=""/>
     <column name="TAS_DERIVATION_SCREEN_TPL" type="VARCHAR" size="128" default="" required="false"/>
+    <column name="TAS_SELFSERVICE_TIMEOUT" type="INTEGER" default="0"/>
+    <column name="TAS_SELFSERVICE_TIME" type="VARCHAR" size="15" default=""/>
+    <column name="TAS_SELFSERVICE_TIME_UNIT" type="VARCHAR" size="15" default=""/>
+    <column name="TAS_SELFSERVICE_TRIGGER_UID" type="VARCHAR" size="32" default=""/>
 
     <validator column="TAS_TYPE">
       <rule name="validValues" value="NORMAL|ADHOC|SUBPROCESS|HIDDEN" message="Please select a valid value for TAS_TYPE."/>

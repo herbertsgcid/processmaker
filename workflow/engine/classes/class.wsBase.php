@@ -76,7 +76,7 @@ class wsBase
 {
     public $stored_system_variables; //boolean
     public $wsSessionId; //web service session id, if the wsbase function is used from a WS request
-
+    private $originalValues = array (); // SESSION temporary array store.
 
     public function __construct ($params = null)
     {
@@ -323,6 +323,7 @@ class wsBase
             $oCriteria->addSelectColumn( ApplicationPeer::APP_NUMBER );
             $oCriteria->addSelectColumn( ApplicationPeer::APP_STATUS );
             $oCriteria->addSelectColumn( AppDelegationPeer::DEL_INDEX );
+            $oCriteria->addSelectColumn( ApplicationPeer::PRO_UID );
             $oCriteria->addAsColumn( 'CASE_TITLE', 'C1.CON_VALUE' );
             $oCriteria->addAlias( "C1", 'CONTENT' );
             $caseTitleConds = array ();
@@ -354,15 +355,21 @@ class wsBase
                     'delIndex' => $aRow['DEL_INDEX']
                 );
                 */
-                $result[] = array ('guid' => $aRow['APP_UID'],'name' => $aRow['APP_NUMBER'],'status' => $aRow['APP_STATUS'],'delIndex' => $aRow['DEL_INDEX']
-                );
+                $result[] = array('guid' => $aRow['APP_UID'],
+                                  'name' => $aRow['APP_NUMBER'],
+                                  'status' => $aRow['APP_STATUS'],
+                                  'delIndex' => $aRow['DEL_INDEX'],
+                                  'processId' => $aRow['PRO_UID']);
                 $oDataset->next();
             }
 
             return $result;
         } catch (Exception $e) {
-            $result[] = array ('guid' => $e->getMessage(),'name' => $e->getMessage(),'status' => $e->getMessage(),'status' => $e->getMessage()
-            );
+            $result[] = array ('guid' => $e->getMessage(),
+                               'name' => $e->getMessage(),
+                               'status' => $e->getMessage(),
+                               'status' => $e->getMessage(),
+                               'processId' => $e->getMessage());
 
             return $result;
         }
@@ -385,16 +392,21 @@ class wsBase
             $oDataset->next();
 
             while ($aRow = $oDataset->getRow()) {
-                $result[] = array ('guid' => $aRow['APP_UID'],'name' => $aRow['APP_NUMBER'],'delIndex' => $aRow['DEL_INDEX']
-                );
+                $result[] = array ('guid' => $aRow['APP_UID'],
+                                   'name' => $aRow['APP_NUMBER'],
+                                   'delIndex' => $aRow['DEL_INDEX'],
+                                   'processId' => $aRow['PRO_UID']);
 
                 $oDataset->next();
             }
 
             return $result;
         } catch (Exception $e) {
-            $result[] = array ('guid' => $e->getMessage(),'name' => $e->getMessage(),'status' => $e->getMessage(),'status' => $e->getMessage()
-            );
+            $result[] = array ('guid' => $e->getMessage(),
+                               'name' => $e->getMessage(),
+                               'status' => $e->getMessage(),
+                               'status' => $e->getMessage(),
+                               'processId' => $e->getMessage());
 
             return $result;
         }
@@ -665,7 +677,9 @@ class wsBase
             $result = array ();
             $oCriteria = new Criteria( 'workflow' );
             $del = DBAdapter::getStringDelimiter();
+            $oCriteria->addSelectColumn( TaskPeer::PRO_UID );
             $oCriteria->addSelectColumn( TaskPeer::TAS_UID );
+            $oCriteria->addSelectColumn( TaskPeer::TAS_START );
             $oCriteria->setDistinct();
             $oCriteria->addAsColumn( 'TAS_TITLE', 'C1.CON_VALUE' );
             $oCriteria->addAlias( "C1", 'CONTENT' );
@@ -687,8 +701,10 @@ class wsBase
             $oDataset->next();
 
             while ($aRow = $oDataset->getRow()) {
-                $result[] = array ('guid' => $aRow['TAS_UID'],'name' => $aRow['TAS_TITLE']
-                );
+                $result[] = array ('guid' => $aRow['TAS_UID'],
+                                   'name' => $aRow['TAS_TITLE'],
+                                   'processId' => $aRow['PRO_UID'],
+                                   'initialTask' => $aRow['TAS_START'] == 'TRUE' ? '1' : '0');
                 $oDataset->next();
             }
 
@@ -714,7 +730,7 @@ class wsBase
      * @param $appFields = null
      * @return $result will return an object
      */
-    public function sendMessage ($caseId, $sFrom, $sTo, $sCc, $sBcc, $sSubject, $sTemplate, $appFields = null, $aAttachment = null)
+    public function sendMessage ($caseId, $sFrom, $sTo, $sCc, $sBcc, $sSubject, $sTemplate, $appFields = null, $aAttachment = null, $showMessage = true)
     {
         try {
             G::loadClass( 'system' );
@@ -765,8 +781,9 @@ class wsBase
             if (! $hasEmailFrom || strpos( $sFrom, $aSetup['MESS_ACCOUNT'] ) === false) {
                 $sFrom = '"' . stripslashes( $sFrom ) . '" <' . $aSetup['MESS_ACCOUNT'] . ">";
             }
+            $showMessage = ($showMessage) ? 1 : 0 ;
 
-            $messageArray = array ('msg_uid' => '','app_uid' => $caseId,'del_index' => 0,'app_msg_type' => 'TRIGGER','app_msg_subject' => $sSubject,'app_msg_from' => $sFrom,'app_msg_to' => $sTo,'app_msg_body' => $sBody,'app_msg_cc' => $sCc,'app_msg_bcc' => $sBcc,'app_msg_attach' => $aAttachment,'app_msg_template' => '','app_msg_status' => 'pending'
+            $messageArray = array ('msg_uid' => '','app_uid' => $caseId,'del_index' => 0,'app_msg_type' => 'TRIGGER','app_msg_subject' => $sSubject,'app_msg_from' => $sFrom,'app_msg_to' => $sTo,'app_msg_body' => $sBody,'app_msg_cc' => $sCc,'app_msg_bcc' => $sBcc,'app_msg_attach' => $aAttachment,'app_msg_template' => '','app_msg_status' => 'pending', 'app_msg_show_message' => $showMessage
             );
 
             $oSpool->create( $messageArray );
@@ -1601,6 +1618,92 @@ class wsBase
     }
 
     /**
+     * save the $_SESSION variables into $originalValues array, to unset them temporary.
+     *
+     */
+    private function saveTemporarySessionVars()
+    {
+        //Unset any variable, because we are starting a new case
+        if (isset( $_SESSION['APPLICATION'] )) {
+            $this->originalValues['APPLICATION'] = $_SESSION['APPLICATION'];
+            unset( $_SESSION['APPLICATION'] );
+        }
+
+        if (isset( $_SESSION['PROCESS'] )) {
+            $this->originalValues['PROCESS'] = $_SESSION['PROCESS'];
+            unset( $_SESSION['PROCESS'] );
+        }
+
+        if (isset( $_SESSION['TASK'] )) {
+            $this->originalValues['TASK'] = $_SESSION['TASK'];
+            unset( $_SESSION['TASK'] );
+        }
+
+        if (isset( $_SESSION['INDEX'] )) {
+            $this->originalValues['INDEX'] = $_SESSION['INDEX'];
+            unset( $_SESSION['INDEX'] );
+        }
+        
+        if (isset( $_SESSION['USER_LOGGED'] )) {
+            $this->originalValues['USER_LOGGED'] = $_SESSION['USER_LOGGED'];
+            unset( $_SESSION['USER_LOGGED'] );
+        }
+
+        if (isset( $_SESSION['USR_USERNAME'] )) {
+            $this->originalValues['USR_USERNAME'] = $_SESSION['USR_USERNAME'];
+            unset( $_SESSION['USR_USERNAME'] );
+        }
+
+        if (isset( $_SESSION['STEP_POSITION'] )) {
+            $this->originalValues['STEP_POSITION'] = $_SESSION['STEP_POSITION'];
+            unset( $_SESSION['STEP_POSITION'] );
+        }
+    }
+    
+    /**
+     * restore the Session variables with values of $originalValues array, if this is set.
+     *
+     */
+    private function restoreSessionVars()
+    {
+        //Restore original values
+        if (isset( $this->originalValues['APPLICATION'] )) {
+            $_SESSION['APPLICATION'] = $this->originalValues['APPLICATION'];
+            unset( $this->originalValues['APPLICATION']);
+        }
+
+        if (isset( $this->originalValues['PROCESS'] )) {
+            $_SESSION['PROCESS'] = $this->originalValues['PROCESS'];
+            unset( $this->originalValues['PROCESS']);
+        }
+
+        if (isset( $this->originalValues['TASK'] )) {
+            $_SESSION['TASK'] = $this->originalValues['TASK'];
+            unset( $this->originalValues['TASK']);
+        }
+
+        if (isset( $this->originalValues['INDEX'] )) {
+            $_SESSION['INDEX'] = $this->originalValues['INDEX'];
+            unset( $this->originalValues['INDEX']);
+        }
+
+        if (isset( $this->originalValues['USR_USERNAME'] )) {
+            $_SESSION['USR_USERNAME'] = $this->originalValues['USR_USERNAME'];
+            unset( $this->originalValues['USR_USERNAME']);
+        }
+        
+        if (isset( $this->originalValues['USER_LOGGED'] )) {
+            $_SESSION['USER_LOGGED'] = $this->originalValues['USER_LOGGED'];
+            unset( $this->originalValues['USER_LOGGED']);
+        }
+
+        if (isset( $this->originalValues['STEP_POSITION'] )) {
+            $_SESSION['STEP_POSITION'] = $this->originalValues['STEP_POSITION'];
+            unset( $this->originalValues['STEP_POSITION']);
+        }
+    }
+
+    /**
      * new Case begins a new case under the name of the logged-in user.
      *
      * @param string $processId
@@ -1612,44 +1715,9 @@ class wsBase
     public function newCase ($processId, $userId, $taskId, $variables)
     {
         try {
-            $originalValues = array ();
-
-            //Unset any variable, because we are starting a new case
-            if (isset( $_SESSION['APPLICATION'] )) {
-                $originalValues['APPLICATION'] = $_SESSION['APPLICATION'];
-                unset( $_SESSION['APPLICATION'] );
-            }
-
-            if (isset( $_SESSION['PROCESS'] )) {
-                $originalValues['PROCESS'] = $_SESSION['PROCESS'];
-                unset( $_SESSION['PROCESS'] );
-            }
-
-            if (isset( $_SESSION['TASK'] )) {
-                $originalValues['TASK'] = $_SESSION['TASK'];
-                unset( $_SESSION['TASK'] );
-            }
-
-            if (isset( $_SESSION['INDEX'] )) {
-                $originalValues['INDEX'] = $_SESSION['INDEX'];
-                unset( $_SESSION['INDEX'] );
-            }
-
-            if (isset( $_SESSION['USER_LOGGED'] )) {
-                $originalValues['USER_LOGGED'] = $_SESSION['USER_LOGGED'];
-                unset( $_SESSION['USER_LOGGED'] );
-            }
-
-            if (isset( $_SESSION['USR_USERNAME'] )) {
-                $originalValues['USR_USERNAME'] = $_SESSION['USR_USERNAME'];
-                unset( $_SESSION['USR_USERNAME'] );
-            }
-
-            if (isset( $_SESSION['STEP_POSITION'] )) {
-                $originalValues['STEP_POSITION'] = $_SESSION['STEP_POSITION'];
-                unset( $_SESSION['STEP_POSITION'] );
-            }
-
+        
+            $this->saveTemporarySessionVars();
+    
             $Fields = array ();
 
             if (is_array( $variables ) && count( $variables ) > 0) {
@@ -1661,7 +1729,7 @@ class wsBase
 
             if (! $pro) {
                 $result = new wsResponse( 11, G::loadTranslation( 'ID_INVALID_PROCESS' ) . " " . $processId );
-
+                $this->restoreSessionVars();
                 return $result;
             }
 
@@ -1692,14 +1760,14 @@ class wsBase
 
                 if ($tasksInThisProcess > 1) {
                     $result = new wsResponse( 13, G::loadTranslation( 'ID_MULTIPLE_STARTING_TASKS' ) );
-
+                    $this->restoreSessionVars();
                     return $result;
                 }
             }
 
             if ($founded == '') {
                 $result = new wsResponse( 14, G::loadTranslation( 'ID_TASK_INVALID_USER_NOT_ASSIGNED_TASK' ) );
-
+                $this->restoreSessionVars();
                 return $result;
             }
 
@@ -1722,31 +1790,8 @@ class wsBase
 
             $up_case = $oCase->updateCase( $caseId, $oldFields );
 
-            //Restore original values
-            if (isset( $originalValues['APPLICATION'] )) {
-                $_SESSION['APPLICATION'] = $originalValues['APPLICATION'];
-            }
-
-            if (isset( $originalValues['PROCESS'] )) {
-                $_SESSION['PROCESS'] = $originalValues['PROCESS'];
-            }
-
-            if (isset( $originalValues['TASK'] )) {
-                $_SESSION['TASK'] = $originalValues['TASK'];
-            }
-
-            if (isset( $originalValues['INDEX'] )) {
-                $_SESSION['INDEX'] = $originalValues['INDEX'];
-            }
-
-            if (isset( $originalValues['USR_USERNAME'] )) {
-                $_SESSION['USR_USERNAME'] = $originalValues['USR_USERNAME'];
-            }
-
-            if (isset( $originalValues['STEP_POSITION'] )) {
-                $_SESSION['STEP_POSITION'] = $originalValues['STEP_POSITION'];
-            }
-
+            $this->restoreSessionVars();
+            
             $result = new wsResponse( 0, G::loadTranslation( 'ID_STARTED_SUCCESSFULLY' ) );
             $result->caseId = $caseId;
             $result->caseNumber = $caseNr;
@@ -1754,7 +1799,7 @@ class wsBase
             return $result;
         } catch (Exception $e) {
             $result = new wsResponse( 100, $e->getMessage() );
-
+            $this->restoreSessionVars();
             return $result;
         }
     }
