@@ -58,7 +58,6 @@ public class TestTriggersSteps{
 
         //WebElement buttonSubmit Pages.DynaformExecution().getField("SUBMIT");
 
-
         /*
         // get count value of field UID_CASE
         int countIdCase = Pages.DynaformExecution().getFieldProperty("UID_CASE","value").length();
